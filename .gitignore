@@ -1,0 +1,10 @@
+# Compiled Object files
+*.o
+*.out
+
+# Executables
+lexor
+lexor.exe
+
+# OS specific files
+.DS_Store
