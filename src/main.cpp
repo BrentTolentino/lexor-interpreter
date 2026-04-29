@@ -49,5 +49,6 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    std::cout << "Script executed successfully!" << std::endl;
     return 0;
 }

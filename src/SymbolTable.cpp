@@ -48,7 +48,88 @@ void SymbolTable::assign(const std::string &name, const VarValue &val)
         throw std::runtime_error(oss.str());
     }
 
-    symbols_[name].value = val;
+    // Type check: ensure value matches declared type
+    Symbol &sym = symbols_[name];
+    bool typeMatch = false;
+
+    switch (sym.type)
+    {
+    case TokenType::TYPE_INT:
+        if (!val.isInt())
+        {
+            std::ostringstream oss;
+            oss << "Type mismatch for variable '" << name << "': expected INT but got ";
+            if (val.isFloat())
+                oss << "FLOAT";
+            else if (val.isChar())
+                oss << "CHAR";
+            else if (val.isBool())
+                oss << "BOOL";
+            else if (val.isString())
+                oss << "STRING";
+            throw std::runtime_error(oss.str());
+        }
+        typeMatch = true;
+        break;
+    case TokenType::TYPE_FLOAT:
+        if (!val.isFloat())
+        {
+            std::ostringstream oss;
+            oss << "Type mismatch for variable '" << name << "': expected FLOAT but got ";
+            if (val.isInt())
+                oss << "INT";
+            else if (val.isChar())
+                oss << "CHAR";
+            else if (val.isBool())
+                oss << "BOOL";
+            else if (val.isString())
+                oss << "STRING";
+            throw std::runtime_error(oss.str());
+        }
+        typeMatch = true;
+        break;
+    case TokenType::TYPE_CHAR:
+        if (!val.isChar())
+        {
+            std::ostringstream oss;
+            oss << "Type mismatch for variable '" << name << "': expected CHAR but got ";
+            if (val.isInt())
+                oss << "INT";
+            else if (val.isFloat())
+                oss << "FLOAT";
+            else if (val.isBool())
+                oss << "BOOL";
+            else if (val.isString())
+                oss << "STRING";
+            throw std::runtime_error(oss.str());
+        }
+        typeMatch = true;
+        break;
+    case TokenType::TYPE_BOOL:
+        if (!val.isBool())
+        {
+            std::ostringstream oss;
+            oss << "Type mismatch for variable '" << name << "': expected BOOL but got ";
+            if (val.isInt())
+                oss << "INT";
+            else if (val.isFloat())
+                oss << "FLOAT";
+            else if (val.isChar())
+                oss << "CHAR";
+            else if (val.isString())
+                oss << "STRING";
+            throw std::runtime_error(oss.str());
+        }
+        typeMatch = true;
+        break;
+    default:
+        throw std::runtime_error("Invalid variable type");
+    }
+
+    if (typeMatch)
+    {
+        sym.value = val;
+    }
 }
 
 // ---------------------------------------------------------------------------

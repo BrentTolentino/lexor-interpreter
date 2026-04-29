@@ -1,21 +1,20 @@
-%% Test basic LEXOR functionality for Increment 1
 SCRIPT AREA
 START SCRIPT
+START SCRIPT
 
-    %% Variable Declarations with initialization
+    %%Lorem Ipsum
+    
     DECLARE INT counter = 10
     DECLARE FLOAT pi = 3.14
     DECLARE CHAR grade = 'A'
     DECLARE BOOL isActive = TRUE
 
-    %% Testing Arithmetic and Assignments
     counter = counter + 5
     pi = pi / 2.0
 
-    %% I/O Keywords - PRINT with concatenation and newline
     PRINT: "Counter value: " & counter $
     PRINT: "Value of pi is: " & pi $
     PRINT: "Grade: " & grade $
     PRINT: "Is Active: " & isActive $
-
+END SCRIPT
 END SCRIPT

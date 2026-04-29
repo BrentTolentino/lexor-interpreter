@@ -97,6 +97,26 @@ void Parser::parseScript()
     parseStatements();
 
     expect(TokenType::END_SCRIPT);
+
+    // Check for multiple START_SCRIPT or END_SCRIPT tokens
+    if (!isAtEnd())
+    {
+        if (check(TokenType::START_SCRIPT))
+        {
+            throw std::runtime_error("Error: Multiple START SCRIPT statements found. Only one is allowed per script.");
+        }
+        if (check(TokenType::END_SCRIPT))
+        {
+            throw std::runtime_error("Error: Multiple END SCRIPT statements found. Only one is allowed per script.");
+        }
+        // If there are other tokens, also report an error
+        if (!isAtEnd())
+        {
+            std::ostringstream oss;
+            oss << "Error: Unexpected tokens after END SCRIPT: " << tokenTypeToString(peek().type);
+            throw std::runtime_error(oss.str());
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -441,7 +461,7 @@ VarValue Parser::parseConcatenation()
         }
         else if (result.isBool())
         {
-            oss_left << (result.asBool() ? "TRUE" : "FALSE");
+            oss_left << (result.asBool() ? "\"TRUE\"" : "\"FALSE\"");
         }
         else if (result.isString())
         {
@@ -463,7 +483,7 @@ VarValue Parser::parseConcatenation()
         }
         else if (right.isBool())
         {
-            oss_right << (right.asBool() ? "TRUE" : "FALSE");
+            oss_right << (right.asBool() ? "\"TRUE\"" : "\"FALSE\"");
         }
         else if (right.isString())
         {
