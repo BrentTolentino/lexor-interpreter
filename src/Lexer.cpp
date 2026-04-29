@@ -134,6 +134,10 @@ Token Lexer::scanString() {
                                  + std::to_string(startLine));
     }
     advance(); // closing "
+    // --- ADDED FIX: Check if the string literal is actually a BOOL literal ---
+    if (value == "TRUE" || value == "FALSE") {
+        return Token(TokenType::BOOL_LITERAL, value, startLine);
+    }
     return Token(TokenType::STRING_LITERAL, value, startLine);
 }
 
@@ -265,17 +269,35 @@ std::vector<Token> Lexer::tokenize() {
             case ',': tokens.emplace_back(TokenType::COMMA,       ",", line_); break;
             case '(': tokens.emplace_back(TokenType::LPAREN,      "(", line_); break;
             case ')': tokens.emplace_back(TokenType::RPAREN,      ")", line_); break;
-            case '[': tokens.emplace_back(TokenType::LBRACKET,    "[", line_); break;
-            case ']': tokens.emplace_back(TokenType::RBRACKET,    "]", line_); break;
-
-            case '>':
-                if (!isAtEnd() && peek() == '=') {
-                    advance();
-                    tokens.emplace_back(TokenType::GREATER_EQ, ">=", line_);
-                } else {
-                    tokens.emplace_back(TokenType::GREATER, ">", line_);
+            case '[':
+            {
+                if (isAtEnd()) {
+                    throw std::runtime_error("Unterminated escape sequence at line " + std::to_string(line_));
                 }
+                
+                // Read the single character that is being escaped
+                char escapedChar = advance(); 
+                
+                // Ensure it is immediately followed by the closing bracket
+                if (isAtEnd() || peek() != ']') {
+                    throw std::runtime_error("Invalid escape sequence or missing ']' at line " + std::to_string(line_));
+                }
+                advance(); // Consume the closing ']'
+                
+                // Emit it as a standard STRING_LITERAL so the Parser can easily print/concatenate it
+                tokens.emplace_back(TokenType::STRING_LITERAL, std::string(1, escapedChar), line_);
                 break;
+            }
+            case ']':
+                tokens.emplace_back(TokenType::RBRACKET, "]", line_); 
+                break;            case '>':
+                    if (!isAtEnd() && peek() == '=') {
+                        advance();
+                        tokens.emplace_back(TokenType::GREATER_EQ, ">=", line_);
+                    } else {
+                        tokens.emplace_back(TokenType::GREATER, ">", line_);
+                    }
+                    break;
 
             case '<':
                 if (!isAtEnd() && peek() == '=') {
