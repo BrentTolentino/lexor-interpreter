@@ -103,11 +103,11 @@ void Parser::parseScript()
     {
         if (check(TokenType::START_SCRIPT))
         {
-            throw std::runtime_error("Error: Multiple START SCRIPT statements found. Only one is allowed per script.");
+            throw std::runtime_error("Multiple START SCRIPT statements found. Only one is allowed per script.");
         }
         if (check(TokenType::END_SCRIPT))
         {
-            throw std::runtime_error("Error: Multiple END SCRIPT statements found. Only one is allowed per script.");
+            throw std::runtime_error("Multiple END SCRIPT statements found. Only one is allowed per script.");
         }
         // If there are other tokens, also report an error
         if (!isAtEnd())

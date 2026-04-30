@@ -7,4 +7,8 @@ lexor
 lexor.exe
 
 # OS specific files
+.continue
 .DS_Store
+
+# Documentation
+Language Specification of LEXOR Program.md
