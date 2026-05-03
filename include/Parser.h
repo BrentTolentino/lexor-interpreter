@@ -59,7 +59,8 @@ private:
     VarValue parseAddition();       // handle + and - operators
     VarValue parseMultiplication(); // handle *, /, and % operators
     VarValue parseConcatenation();  // handle & (concatenation)
-    VarValue parsePrimaryValue();   // identifier, literal, or grouped expression
+    VarValue parseUnary();          // handle unary operators + and - operators
+    VarValue parsePrimaryValue();   // identifier, literal, or grouped expression 
 
     // --- Utility ---
     std::string tokenTypeToString(TokenType type) const;

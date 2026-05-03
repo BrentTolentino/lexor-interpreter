@@ -436,12 +436,12 @@ VarValue Parser::parseMultiplication()
 // ---------------------------------------------------------------------------
 VarValue Parser::parseConcatenation()
 {
-    VarValue result = parsePrimaryValue();
+    VarValue result = parseUnary();
 
     while (check(TokenType::AMPERSAND))
     {
         advance(); // consume &
-        VarValue right = parsePrimaryValue();
+        VarValue right = parseUnary();
 
         // Convert both to strings and concatenate
         std::ostringstream oss_left, oss_right;
@@ -496,6 +496,47 @@ VarValue Parser::parseConcatenation()
     }
 
     return result;
+}
+
+//
+// parseUnary - handle unary + and - operators
+//
+VarValue Parser::parseUnary()
+{
+    if (check(TokenType::PLUS) || check(TokenType::MINUS))
+    {
+        TokenType operatorType = advance().type; // Consume the unary operator
+
+        VarValue right = parseUnary(); // Recursively call parseUnary for chained unary operators
+
+        if (operatorType == TokenType::MINUS)
+        {
+            if (right.isInt())
+            {
+                return VarValue(-right.asInt());
+            }
+            else if (right.isFloat())
+            {
+                return VarValue(-right.asFloat());
+            }
+            else
+            {
+                throw std::runtime_error("Cannot apply unary minus to non-numeric type.");
+            }
+        }
+        // Unary PLUS simply returns the value as is.
+        // The Lexer already handles numeric literals with implicit positive sign.
+        else if (operatorType == TokenType::PLUS)
+        {
+            if (right.isInt() || right.isFloat()) {
+                return right; // No change for unary plus on numbers
+            } else {
+                 throw std::runtime_error("Cannot apply unary plus to non-numeric type.");
+            }
+        }
+    }
+    // If no unary operator, parse the next higher precedence (primary value)
+    return parsePrimaryValue();
 }
 
 // ---------------------------------------------------------------------------
