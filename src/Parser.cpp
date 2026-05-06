@@ -4,6 +4,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <iomanip>
+#include <deque>
+#include <cctype>
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -283,47 +285,188 @@ void Parser::parseScan()
     expect(TokenType::SCAN);
     expect(TokenType::COLON);
 
+    // Collect one or more identifiers separated by commas
+    std::vector<Token> ids;
     Token idToken = expect(TokenType::IDENTIFIER);
+    ids.push_back(idToken);
 
-    if (!symbolTable_.exists(idToken.value))
+    while (match(TokenType::COMMA))
     {
-        std::ostringstream oss;
-        oss << "Variable '" << idToken.value << "' is not declared";
-        throw std::runtime_error(oss.str());
+        Token nextId = expect(TokenType::IDENTIFIER);
+        ids.push_back(nextId);
     }
 
-    // For now, just read input and convert to appropriate type
-    Symbol sym = symbolTable_.get(idToken.value);
-    std::string input;
-    std::getline(std::cin, input);
+    // Read scan input as a buffered stream so both formats work:
+    //   4
+    //   5
+    //   6
+    // and
+    //   4,5,6
+    //   4, 5, 6
+    std::deque<std::string> bufferedInputs;
 
-    try
+    auto trim = [](const std::string &text) -> std::string
     {
-        VarValue value;
-        switch (sym.type)
+        size_t start = 0;
+        while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])))
         {
-        case TokenType::TYPE_INT:
-            value = std::stoi(input);
-            break;
-        case TokenType::TYPE_FLOAT:
-            value = std::stof(input);
-            break;
-        case TokenType::TYPE_CHAR:
-            value = input.empty() ? '\0' : input[0];
-            break;
-        case TokenType::TYPE_BOOL:
-            value = (input == "TRUE" || input == "true" || input == "1");
-            break;
-        default:
-            throw std::runtime_error("Invalid variable type in SCAN");
+            ++start;
         }
-        symbolTable_.assign(idToken.value, value);
-    }
-    catch (const std::exception &e)
+
+        size_t end = text.size();
+        while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])))
+        {
+            --end;
+        }
+
+        return text.substr(start, end - start);
+    };
+
+    auto fillBuffer = [&]() -> bool
     {
-        std::ostringstream oss;
-        oss << "Error converting input for variable '" << idToken.value << "': " << e.what();
-        throw std::runtime_error(oss.str());
+        std::string line;
+
+        while (bufferedInputs.empty() && std::getline(std::cin, line))
+        {
+            std::string trimmedLine = trim(line);
+            if (trimmedLine.empty())
+            {
+                continue;
+            }
+
+            if (trimmedLine.find(',') != std::string::npos)
+            {
+                std::stringstream lineStream(trimmedLine);
+                std::string part;
+
+                while (std::getline(lineStream, part, ','))
+                {
+                    std::string token = trim(part);
+                    if (token.empty())
+                    {
+                        throw std::runtime_error("Invalid SCAN input: empty value between commas");
+                    }
+                    bufferedInputs.push_back(token);
+                }
+            }
+            else
+            {
+                std::stringstream lineStream(trimmedLine);
+                std::string token;
+
+                while (lineStream >> token)
+                {
+                    bufferedInputs.push_back(token);
+                }
+            }
+        }
+
+        return !bufferedInputs.empty();
+    };
+
+    // For each identifier, read one buffered value from stdin.
+    for (const Token &t : ids)
+    {
+        if (!symbolTable_.exists(t.value))
+        {
+            std::ostringstream oss;
+            oss << "Variable '" << t.value << "' is not declared";
+            throw std::runtime_error(oss.str());
+        }
+
+        Symbol sym = symbolTable_.get(t.value);
+        if (bufferedInputs.empty() && !fillBuffer())
+        {
+            std::ostringstream oss;
+            oss << "Insufficient input for variable '" << t.value << "'";
+            throw std::runtime_error(oss.str());
+        }
+
+        std::string inputToken = bufferedInputs.front();
+        bufferedInputs.pop_front();
+
+        try
+        {
+            VarValue value;
+
+            // Strict parsing: ensure entire token is consumed and type matches
+            if (sym.type == TokenType::TYPE_INT)
+            {
+                size_t idx = 0;
+                long v = 0;
+                try
+                {
+                    v = std::stol(inputToken, &idx);
+                }
+                catch (...) { idx = std::string::npos; }
+                if (idx != inputToken.size())
+                {
+                    std::ostringstream oss;
+                    oss << "Invalid integer input for variable '" << t.value << "': '" << inputToken << "'";
+                    throw std::runtime_error(oss.str());
+                }
+                value = static_cast<int>(v);
+            }
+            else if (sym.type == TokenType::TYPE_FLOAT)
+            {
+                size_t idx = 0;
+                float v = 0.0f;
+                try
+                {
+                    v = std::stof(inputToken, &idx);
+                }
+                catch (...) { idx = std::string::npos; }
+                if (idx != inputToken.size())
+                {
+                    std::ostringstream oss;
+                    oss << "Invalid float input for variable '" << t.value << "': '" << inputToken << "'";
+                    throw std::runtime_error(oss.str());
+                }
+                value = v;
+            }
+            else if (sym.type == TokenType::TYPE_CHAR)
+            {
+                if (inputToken.size() != 1)
+                {
+                    std::ostringstream oss;
+                    oss << "Invalid char input for variable '" << t.value << "': '" << inputToken << "'";
+                    throw std::runtime_error(oss.str());
+                }
+                value = inputToken[0];
+            }
+            else if (sym.type == TokenType::TYPE_BOOL)
+            {
+                // Accept TRUE/FALSE (case-insensitive) or 1/0
+                std::string s = inputToken;
+                for (auto &c : s) c = static_cast<char>(std::toupper(c));
+                if (s == "TRUE" || s == "1")
+                {
+                    value = true;
+                }
+                else if (s == "FALSE" || s == "0")
+                {
+                    value = false;
+                }
+                else
+                {
+                    std::ostringstream oss;
+                    oss << "Invalid boolean input for variable '" << t.value << "': '" << inputToken << "'";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            else
+            {
+                throw std::runtime_error("Invalid variable type in SCAN");
+            }
+
+            symbolTable_.assign(t.value, value);
+        }
+        catch (const std::exception &e)
+        {
+            std::ostringstream oss;
+            oss << "Error converting input for variable '" << t.value << "': " << e.what();
+            throw std::runtime_error(oss.str());
+        }
     }
 }
 

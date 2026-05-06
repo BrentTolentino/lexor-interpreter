@@ -1,0 +1,10 @@
+%% Test Scan (working) 
+SCRIPT AREA
+START SCRIPT
+DECLARE BOOL x, y, z
+PRINT: "Enter three number separated by comma." $
+SCAN: x, y, z
+%%y = -5
+%%z = +5
+PRINT: [[] & x & " " & y & " " & z & []] $
+END SCRIPT
