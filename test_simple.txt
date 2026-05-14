@@ -6,7 +6,7 @@ START SCRIPT
     DECLARE INT abc, counter = 10
     DECLARE FLOAT pi = 3.14
     DECLARE CHAR grade = 'A'
-    DECLARE BOOL isActive = TRUE
+    DECLARE BOOL isActive = "TRUE"
 
     counter = counter + 5
     pi = pi / 2.0

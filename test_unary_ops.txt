@@ -1,0 +1,12 @@
+%% Test Unary Operators
+
+SCRIPT AREA
+START SCRIPT
+DECLARE INT x = 10
+DECLARE INT y = -5
+DECLARE INT z = +8
+DECLARE FLOAT f1 = -3.14
+DECLARE INT combined = -(-x) + (+y) - z
+
+PRINT: x & " " & y & " " & z & " " & f1 & " " & combined $
+END SCRIPT

@@ -1,0 +1,9 @@
+%% Test Unary Operators
+SCRIPT AREA
+START SCRIPT
+DECLARE INT x, y, z
+x = 10
+y = -5
+z = +5
+PRINT: x & y & z
+END SCRIPT

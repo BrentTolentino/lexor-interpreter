@@ -56,9 +56,13 @@ private:
 
     // --- Expression evaluation ---
     VarValue evaluateExpression();  // parse and evaluate an expression
+    VarValue parseLogicalOr();      // handle OR operator (lowest precedence)
+    VarValue parseLogicalAnd();     // handle AND operator
+    VarValue parseComparison();     // handle ==, !=, <, >, <=, >= operators
     VarValue parseAddition();       // handle + and - operators
     VarValue parseMultiplication(); // handle *, /, and % operators
     VarValue parseConcatenation();  // handle & (concatenation)
+    VarValue parseUnary();          // handle unary operators (unary + and -, NOT)
     VarValue parsePrimaryValue();   // identifier, literal, or grouped expression
 
     // --- Utility ---

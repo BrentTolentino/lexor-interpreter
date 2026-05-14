@@ -4,6 +4,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <iomanip>
+#include <deque>
+#include <cctype>
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -103,11 +105,11 @@ void Parser::parseScript()
     {
         if (check(TokenType::START_SCRIPT))
         {
-            throw std::runtime_error("Error: Multiple START SCRIPT statements found. Only one is allowed per script.");
+            throw std::runtime_error("Multiple START SCRIPT statements found. Only one is allowed per script.");
         }
         if (check(TokenType::END_SCRIPT))
         {
-            throw std::runtime_error("Error: Multiple END SCRIPT statements found. Only one is allowed per script.");
+            throw std::runtime_error("Multiple END SCRIPT statements found. Only one is allowed per script.");
         }
         // If there are other tokens, also report an error
         if (!isAtEnd())
@@ -283,47 +285,195 @@ void Parser::parseScan()
     expect(TokenType::SCAN);
     expect(TokenType::COLON);
 
+    // Collect one or more identifiers separated by commas
+    std::vector<Token> ids;
     Token idToken = expect(TokenType::IDENTIFIER);
+    ids.push_back(idToken);
 
-    if (!symbolTable_.exists(idToken.value))
+    while (match(TokenType::COMMA))
     {
-        std::ostringstream oss;
-        oss << "Variable '" << idToken.value << "' is not declared";
-        throw std::runtime_error(oss.str());
+        Token nextId = expect(TokenType::IDENTIFIER);
+        ids.push_back(nextId);
     }
 
-    // For now, just read input and convert to appropriate type
-    Symbol sym = symbolTable_.get(idToken.value);
-    std::string input;
-    std::getline(std::cin, input);
+    // Read scan input as a buffered stream so both formats work:
+    //   4
+    //   5
+    //   6
+    // and
+    //   4,5,6
+    //   4, 5, 6
+    std::deque<std::string> bufferedInputs;
 
-    try
+    auto trim = [](const std::string &text) -> std::string
     {
-        VarValue value;
-        switch (sym.type)
+        size_t start = 0;
+        while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])))
         {
-        case TokenType::TYPE_INT:
-            value = std::stoi(input);
-            break;
-        case TokenType::TYPE_FLOAT:
-            value = std::stof(input);
-            break;
-        case TokenType::TYPE_CHAR:
-            value = input.empty() ? '\0' : input[0];
-            break;
-        case TokenType::TYPE_BOOL:
-            value = (input == "TRUE" || input == "true" || input == "1");
-            break;
-        default:
-            throw std::runtime_error("Invalid variable type in SCAN");
+            ++start;
         }
-        symbolTable_.assign(idToken.value, value);
-    }
-    catch (const std::exception &e)
+
+        size_t end = text.size();
+        while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])))
+        {
+            --end;
+        }
+
+        return text.substr(start, end - start);
+    };
+
+    auto fillBuffer = [&]() -> bool
     {
-        std::ostringstream oss;
-        oss << "Error converting input for variable '" << idToken.value << "': " << e.what();
-        throw std::runtime_error(oss.str());
+        std::string line;
+
+        while (bufferedInputs.empty() && std::getline(std::cin, line))
+        {
+            std::string trimmedLine = trim(line);
+            if (trimmedLine.empty())
+            {
+                continue;
+            }
+
+            if (trimmedLine.find(',') != std::string::npos)
+            {
+                std::stringstream lineStream(trimmedLine);
+                std::string part;
+
+                while (std::getline(lineStream, part, ','))
+                {
+                    std::string token = trim(part);
+                    if (token.empty())
+                    {
+                        throw std::runtime_error("Invalid SCAN input: empty value between commas");
+                    }
+                    bufferedInputs.push_back(token);
+                }
+            }
+            else
+            {
+                std::stringstream lineStream(trimmedLine);
+                std::string token;
+
+                while (lineStream >> token)
+                {
+                    bufferedInputs.push_back(token);
+                }
+            }
+        }
+
+        return !bufferedInputs.empty();
+    };
+
+    // For each identifier, read one buffered value from stdin.
+    for (const Token &t : ids)
+    {
+        if (!symbolTable_.exists(t.value))
+        {
+            std::ostringstream oss;
+            oss << "Variable '" << t.value << "' is not declared";
+            throw std::runtime_error(oss.str());
+        }
+
+        Symbol sym = symbolTable_.get(t.value);
+        if (bufferedInputs.empty() && !fillBuffer())
+        {
+            std::ostringstream oss;
+            oss << "Insufficient input for variable '" << t.value << "'";
+            throw std::runtime_error(oss.str());
+        }
+
+        std::string inputToken = bufferedInputs.front();
+        bufferedInputs.pop_front();
+
+        try
+        {
+            VarValue value;
+
+            // Strict parsing: ensure entire token is consumed and type matches
+            if (sym.type == TokenType::TYPE_INT)
+            {
+                size_t idx = 0;
+                long v = 0;
+                try
+                {
+                    v = std::stol(inputToken, &idx);
+                }
+                catch (...)
+                {
+                    idx = std::string::npos;
+                }
+                if (idx != inputToken.size())
+                {
+                    std::ostringstream oss;
+                    oss << "Invalid integer input for variable '" << t.value << "': '" << inputToken << "'";
+                    throw std::runtime_error(oss.str());
+                }
+                value = static_cast<int>(v);
+            }
+            else if (sym.type == TokenType::TYPE_FLOAT)
+            {
+                size_t idx = 0;
+                float v = 0.0f;
+                try
+                {
+                    v = std::stof(inputToken, &idx);
+                }
+                catch (...)
+                {
+                    idx = std::string::npos;
+                }
+                if (idx != inputToken.size())
+                {
+                    std::ostringstream oss;
+                    oss << "Invalid float input for variable '" << t.value << "': '" << inputToken << "'";
+                    throw std::runtime_error(oss.str());
+                }
+                value = v;
+            }
+            else if (sym.type == TokenType::TYPE_CHAR)
+            {
+                if (inputToken.size() != 1)
+                {
+                    std::ostringstream oss;
+                    oss << "Invalid char input for variable '" << t.value << "': '" << inputToken << "'";
+                    throw std::runtime_error(oss.str());
+                }
+                value = inputToken[0];
+            }
+            else if (sym.type == TokenType::TYPE_BOOL)
+            {
+                // Accept TRUE/FALSE (case-insensitive) or 1/0
+                std::string s = inputToken;
+                for (auto &c : s)
+                    c = static_cast<char>(std::toupper(c));
+                if (s == "TRUE" || s == "1")
+                {
+                    value = true;
+                }
+                else if (s == "FALSE" || s == "0")
+                {
+                    value = false;
+                }
+                else
+                {
+                    std::ostringstream oss;
+                    oss << "Invalid boolean input for variable '" << t.value << "': '" << inputToken << "'";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            else
+            {
+                throw std::runtime_error("Invalid variable type in SCAN");
+            }
+
+            symbolTable_.assign(t.value, value);
+        }
+        catch (const std::exception &e)
+        {
+            std::ostringstream oss;
+            oss << "Error converting input for variable '" << t.value << "': " << e.what();
+            throw std::runtime_error(oss.str());
+        }
     }
 }
 
@@ -332,7 +482,148 @@ void Parser::parseScan()
 // ---------------------------------------------------------------------------
 VarValue Parser::evaluateExpression()
 {
-    return parseAddition();
+    return parseLogicalOr();
+}
+
+// ---------------------------------------------------------------------------
+// parseLogicalOr — handle OR operator (lowest precedence)
+// ---------------------------------------------------------------------------
+VarValue Parser::parseLogicalOr()
+{
+    VarValue result = parseLogicalAnd();
+
+    while (check(TokenType::OR))
+    {
+        advance(); // consume OR
+        VarValue right = parseLogicalAnd();
+
+        // Both operands must be boolean
+        if (!result.isBool() || !right.isBool())
+        {
+            throw std::runtime_error("Logical OR requires boolean operands");
+        }
+
+        result = VarValue(result.asBool() || right.asBool());
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// parseLogicalAnd — handle AND operator
+// ---------------------------------------------------------------------------
+VarValue Parser::parseLogicalAnd()
+{
+    VarValue result = parseComparison();
+
+    while (check(TokenType::AND))
+    {
+        advance(); // consume AND
+        VarValue right = parseComparison();
+
+        // Both operands must be boolean
+        if (!result.isBool() || !right.isBool())
+        {
+            throw std::runtime_error("Logical AND requires boolean operands");
+        }
+
+        result = VarValue(result.asBool() && right.asBool());
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// parseComparison — handle ==, !=, <, >, <=, >= operators
+// ---------------------------------------------------------------------------
+VarValue Parser::parseComparison()
+{
+    VarValue result = parseAddition();
+
+    while (check(TokenType::EQUAL) || check(TokenType::NOT_EQUAL) ||
+           check(TokenType::LESS) || check(TokenType::GREATER) ||
+           check(TokenType::LESS_EQ) || check(TokenType::GREATER_EQ))
+    {
+        TokenType op = advance().type;
+        VarValue right = parseAddition();
+
+        bool comparison_result = false;
+
+        // Handle numeric comparisons
+        if ((result.isInt() || result.isFloat()) && (right.isInt() || right.isFloat()))
+        {
+            float lhs = result.isInt() ? static_cast<float>(result.asInt()) : result.asFloat();
+            float rhs = right.isInt() ? static_cast<float>(right.asInt()) : right.asFloat();
+
+            switch (op)
+            {
+            case TokenType::EQUAL:
+                comparison_result = (lhs == rhs);
+                break;
+            case TokenType::NOT_EQUAL:
+                comparison_result = (lhs != rhs);
+                break;
+            case TokenType::LESS:
+                comparison_result = (lhs < rhs);
+                break;
+            case TokenType::GREATER:
+                comparison_result = (lhs > rhs);
+                break;
+            case TokenType::LESS_EQ:
+                comparison_result = (lhs <= rhs);
+                break;
+            case TokenType::GREATER_EQ:
+                comparison_result = (lhs >= rhs);
+                break;
+            default:
+                break;
+            }
+        }
+        // Handle string comparisons
+        else if (result.isString() && right.isString())
+        {
+            std::string lhs = result.asString();
+            std::string rhs = right.asString();
+
+            switch (op)
+            {
+            case TokenType::EQUAL:
+                comparison_result = (lhs == rhs);
+                break;
+            case TokenType::NOT_EQUAL:
+                comparison_result = (lhs != rhs);
+                break;
+            default:
+                throw std::runtime_error("Comparison operators <, >, <=, >= not supported for strings");
+            }
+        }
+        // Handle boolean comparisons
+        else if (result.isBool() && right.isBool())
+        {
+            bool lhs = result.asBool();
+            bool rhs = right.asBool();
+
+            switch (op)
+            {
+            case TokenType::EQUAL:
+                comparison_result = (lhs == rhs);
+                break;
+            case TokenType::NOT_EQUAL:
+                comparison_result = (lhs != rhs);
+                break;
+            default:
+                throw std::runtime_error("Only == and != operators supported for booleans");
+            }
+        }
+        else
+        {
+            throw std::runtime_error("Invalid operand types for comparison operator");
+        }
+
+        result = VarValue(comparison_result);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -436,12 +727,12 @@ VarValue Parser::parseMultiplication()
 // ---------------------------------------------------------------------------
 VarValue Parser::parseConcatenation()
 {
-    VarValue result = parsePrimaryValue();
+    VarValue result = parseUnary();
 
     while (check(TokenType::AMPERSAND))
     {
         advance(); // consume &
-        VarValue right = parsePrimaryValue();
+        VarValue right = parseUnary();
 
         // Convert both to strings and concatenate
         std::ostringstream oss_left, oss_right;
@@ -496,6 +787,63 @@ VarValue Parser::parseConcatenation()
     }
 
     return result;
+}
+
+//
+// parseUnary - handle unary operators: +, -, and NOT
+//
+VarValue Parser::parseUnary()
+{
+    if (check(TokenType::NOT))
+    {
+        advance();                     // consume NOT
+        VarValue right = parseUnary(); // Recursively call for chained unary operators
+
+        if (!right.isBool())
+        {
+            throw std::runtime_error("NOT operator requires a boolean operand");
+        }
+
+        return VarValue(!right.asBool());
+    }
+
+    if (check(TokenType::PLUS) || check(TokenType::MINUS))
+    {
+        TokenType operatorType = advance().type; // Consume the unary operator
+
+        VarValue right = parseUnary(); // Recursively call parseUnary for chained unary operators
+
+        if (operatorType == TokenType::MINUS)
+        {
+            if (right.isInt())
+            {
+                return VarValue(-right.asInt());
+            }
+            else if (right.isFloat())
+            {
+                return VarValue(-right.asFloat());
+            }
+            else
+            {
+                throw std::runtime_error("Cannot apply unary minus to non-numeric type.");
+            }
+        }
+        // Unary PLUS simply returns the value as is.
+        // The Lexer already handles numeric literals with implicit positive sign.
+        else if (operatorType == TokenType::PLUS)
+        {
+            if (right.isInt() || right.isFloat())
+            {
+                return right; // No change for unary plus on numbers
+            }
+            else
+            {
+                throw std::runtime_error("Cannot apply unary plus to non-numeric type.");
+            }
+        }
+    }
+    // If no unary operator, parse the next higher precedence (primary value)
+    return parsePrimaryValue();
 }
 
 // ---------------------------------------------------------------------------

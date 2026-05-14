@@ -7,4 +7,7 @@ lexor
 lexor.exe
 
 # OS specific files
+.continue
 .DS_Store
+
+CLAUDE.md
