@@ -1,10 +1,9 @@
 SCRIPT AREA
 START SCRIPT
-START SCRIPT
 
     %%Lorem Ipsum
     
-    DECLARE INT counter = 10
+    DECLARE INT abc, counter = 10
     DECLARE FLOAT pi = 3.14
     DECLARE CHAR grade = 'A'
     DECLARE BOOL isActive = TRUE
@@ -16,5 +15,4 @@ START SCRIPT
     PRINT: "Value of pi is: " & pi $
     PRINT: "Grade: " & grade $
     PRINT: "Is Active: " & isActive $
-END SCRIPT
 END SCRIPT
