@@ -1,18 +1,14 @@
+%% Test Simple
 SCRIPT AREA
 START SCRIPT
-
-    %%Lorem Ipsum
-    
-    DECLARE INT abc, counter = 10
-    DECLARE FLOAT pi = 3.14
-    DECLARE CHAR grade = 'A'
-    DECLARE BOOL isActive = "TRUE"
-
-    counter = counter + 5
-    pi = pi / 2.0
-
-    PRINT: "Counter value: " & counter $
-    PRINT: "Value of pi is: " & pi $
-    PRINT: "Grade: " & grade $
-    PRINT: "Is Active: " & isActive $
+DECLARE INT x, y, z
+PRINT: "Enter three number separated by comma." $
+SCAN: x, y, z
+DECLARE INT arithmetic = x + y
+DECLARE BOOL logical = arithmetic > z
+DECLARE INT unary = -10
+PRINT: arithmetic $
+PRINT: logical $
+PRINT: unary $
+PRINT: [[] & x & " " & y & " " & z & []] $
 END SCRIPT
