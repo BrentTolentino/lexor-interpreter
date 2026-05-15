@@ -1,3 +1,4 @@
+%% Test Simple
 SCRIPT AREA
 START SCRIPT
 DECLARE CHAR let

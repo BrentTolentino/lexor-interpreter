@@ -470,7 +470,148 @@ void Parser::parseScan()
 // ---------------------------------------------------------------------------
 VarValue Parser::evaluateExpression()
 {
-    return parseAddition();
+    return parseLogicalOr();
+}
+
+// ---------------------------------------------------------------------------
+// parseLogicalOr — handle OR operator (lowest precedence)
+// ---------------------------------------------------------------------------
+VarValue Parser::parseLogicalOr()
+{
+    VarValue result = parseLogicalAnd();
+
+    while (check(TokenType::OR))
+    {
+        advance(); // consume OR
+        VarValue right = parseLogicalAnd();
+
+        // Both operands must be boolean
+        if (!result.isBool() || !right.isBool())
+        {
+            throw std::runtime_error("Logical OR requires boolean operands");
+        }
+
+        result = VarValue(result.asBool() || right.asBool());
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// parseLogicalAnd — handle AND operator
+// ---------------------------------------------------------------------------
+VarValue Parser::parseLogicalAnd()
+{
+    VarValue result = parseComparison();
+
+    while (check(TokenType::AND))
+    {
+        advance(); // consume AND
+        VarValue right = parseComparison();
+
+        // Both operands must be boolean
+        if (!result.isBool() || !right.isBool())
+        {
+            throw std::runtime_error("Logical AND requires boolean operands");
+        }
+
+        result = VarValue(result.asBool() && right.asBool());
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// parseComparison — handle ==, !=, <, >, <=, >= operators
+// ---------------------------------------------------------------------------
+VarValue Parser::parseComparison()
+{
+    VarValue result = parseAddition();
+
+    while (check(TokenType::EQUAL) || check(TokenType::NOT_EQUAL) ||
+           check(TokenType::LESS) || check(TokenType::GREATER) ||
+           check(TokenType::LESS_EQ) || check(TokenType::GREATER_EQ))
+    {
+        TokenType op = advance().type;
+        VarValue right = parseAddition();
+
+        bool comparison_result = false;
+
+        // Handle numeric comparisons
+        if ((result.isInt() || result.isFloat()) && (right.isInt() || right.isFloat()))
+        {
+            float lhs = result.isInt() ? static_cast<float>(result.asInt()) : result.asFloat();
+            float rhs = right.isInt() ? static_cast<float>(right.asInt()) : right.asFloat();
+
+            switch (op)
+            {
+            case TokenType::EQUAL:
+                comparison_result = (lhs == rhs);
+                break;
+            case TokenType::NOT_EQUAL:
+                comparison_result = (lhs != rhs);
+                break;
+            case TokenType::LESS:
+                comparison_result = (lhs < rhs);
+                break;
+            case TokenType::GREATER:
+                comparison_result = (lhs > rhs);
+                break;
+            case TokenType::LESS_EQ:
+                comparison_result = (lhs <= rhs);
+                break;
+            case TokenType::GREATER_EQ:
+                comparison_result = (lhs >= rhs);
+                break;
+            default:
+                break;
+            }
+        }
+        // Handle string comparisons
+        else if (result.isString() && right.isString())
+        {
+            std::string lhs = result.asString();
+            std::string rhs = right.asString();
+
+            switch (op)
+            {
+            case TokenType::EQUAL:
+                comparison_result = (lhs == rhs);
+                break;
+            case TokenType::NOT_EQUAL:
+                comparison_result = (lhs != rhs);
+                break;
+            default:
+                throw std::runtime_error("Comparison operators <, >, <=, >= not supported for strings");
+            }
+        }
+        // Handle boolean comparisons
+        else if (result.isBool() && right.isBool())
+        {
+            bool lhs = result.asBool();
+            bool rhs = right.asBool();
+
+            switch (op)
+            {
+            case TokenType::EQUAL:
+                comparison_result = (lhs == rhs);
+                break;
+            case TokenType::NOT_EQUAL:
+                comparison_result = (lhs != rhs);
+                break;
+            default:
+                throw std::runtime_error("Only == and != operators supported for booleans");
+            }
+        }
+        else
+        {
+            throw std::runtime_error("Invalid operand types for comparison operator");
+        }
+
+        result = VarValue(comparison_result);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -637,10 +778,23 @@ VarValue Parser::parseConcatenation()
 }
 
 //
-// parseUnary - handle unary + and - operators
+// parseUnary - handle unary operators: +, -, and NOT
 //
 VarValue Parser::parseUnary()
 {
+    if (check(TokenType::NOT))
+    {
+        advance();                     // consume NOT
+        VarValue right = parseUnary(); // Recursively call for chained unary operators
+
+        if (!right.isBool())
+        {
+            throw std::runtime_error("NOT operator requires a boolean operand");
+        }
+
+        return VarValue(!right.asBool());
+    }
+
     if (check(TokenType::PLUS) || check(TokenType::MINUS))
     {
         TokenType operatorType = advance().type; // Consume the unary operator
