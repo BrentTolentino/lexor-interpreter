@@ -258,23 +258,11 @@ void Parser::parsePrint()
     expect(TokenType::PRINT);
     expect(TokenType::COLON);
 
-    // Parse and print the first expression
+    // Parse and print the entire concatenation expression
+    // The expression can include & operators to concatenate values,
+    // and $ tokens which represent newlines
     VarValue value = evaluateExpression();
     printValue(value);
-
-    // Handle concatenation (&) and newline ($)
-    while (check(TokenType::AMPERSAND) || check(TokenType::DOLLAR))
-    {
-        if (match(TokenType::AMPERSAND))
-        {
-            value = evaluateExpression();
-            printValue(value);
-        }
-        else if (match(TokenType::DOLLAR))
-        {
-            std::cout << std::endl;
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +386,10 @@ void Parser::parseScan()
                 {
                     v = std::stol(inputToken, &idx);
                 }
-                catch (...) { idx = std::string::npos; }
+                catch (...)
+                {
+                    idx = std::string::npos;
+                }
                 if (idx != inputToken.size())
                 {
                     std::ostringstream oss;
@@ -415,7 +406,10 @@ void Parser::parseScan()
                 {
                     v = std::stof(inputToken, &idx);
                 }
-                catch (...) { idx = std::string::npos; }
+                catch (...)
+                {
+                    idx = std::string::npos;
+                }
                 if (idx != inputToken.size())
                 {
                     std::ostringstream oss;
@@ -438,7 +432,8 @@ void Parser::parseScan()
             {
                 // Accept TRUE/FALSE (case-insensitive) or 1/0
                 std::string s = inputToken;
-                for (auto &c : s) c = static_cast<char>(std::toupper(c));
+                for (auto &c : s)
+                    c = static_cast<char>(std::toupper(c));
                 if (s == "TRUE" || s == "1")
                 {
                     value = true;
@@ -671,10 +666,13 @@ VarValue Parser::parseUnary()
         // The Lexer already handles numeric literals with implicit positive sign.
         else if (operatorType == TokenType::PLUS)
         {
-            if (right.isInt() || right.isFloat()) {
+            if (right.isInt() || right.isFloat())
+            {
                 return right; // No change for unary plus on numbers
-            } else {
-                 throw std::runtime_error("Cannot apply unary plus to non-numeric type.");
+            }
+            else
+            {
+                throw std::runtime_error("Cannot apply unary plus to non-numeric type.");
             }
         }
     }
@@ -733,6 +731,13 @@ VarValue Parser::parsePrimaryValue()
     {
         Token token = advance();
         return token.value == "TRUE";
+    }
+
+    // Dollar sign ($) represents a newline/carriage return in PRINT context
+    if (check(TokenType::DOLLAR))
+    {
+        advance();
+        return VarValue(std::string("\n"));
     }
 
     // Grouped expression (not implemented yet)

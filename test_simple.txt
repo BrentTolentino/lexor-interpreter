@@ -1,18 +1,10 @@
 SCRIPT AREA
 START SCRIPT
-
-    %%Lorem Ipsum
-    
-    DECLARE INT counter = 10
-    DECLARE FLOAT pi = 3.14
-    DECLARE CHAR grade = 'A'
-    DECLARE BOOL isActive = "TRUE"
-
-    counter = counter + 5
-    pi = pi / 2.0
-
-    PRINT: "Counter value: " & counter $
-    PRINT: "Value of pi is: " & pi $
-    PRINT: "Grade: " & grade $
-    PRINT: "Is Active: " & isActive $
+DECLARE CHAR let
+DECLARE INT n
+DECLARE FLOAT f
+SCAN: let
+SCAN: n
+SCAN: f
+PRINT: f & $ & n & $ & let
 END SCRIPT
