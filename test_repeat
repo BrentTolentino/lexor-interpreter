@@ -1,0 +1,13 @@
+SCRIPT AREA
+START SCRIPT
+DECLARE INT i = 0, j = 0
+FOR (i = 0, i < 3, i = i + 1)
+START FOR
+PRINT: i & $
+END FOR
+REPEAT WHEN (j < 2)
+START REPEAT
+PRINT: j & $
+j = j + 1
+END REPEAT
+END SCRIPT

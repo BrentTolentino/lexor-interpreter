@@ -165,11 +165,11 @@ void Parser::parseStatement()
     }
     else if (check(TokenType::FOR))
     {
-        throw std::runtime_error("FOR loops not yet implemented");
+        parseFor();
     }
     else if (check(TokenType::REPEAT_WHEN))
     {
-        throw std::runtime_error("REPEAT WHEN loops not yet implemented");
+        parseRepeat();
     }
     else
     {
@@ -499,8 +499,7 @@ void Parser::parseIf()
     else
     {
         // Skip the body without executing
-        while (!check(TokenType::END_IF) && !isAtEnd())
-            advance();
+        skipToTopLevelBoundary({TokenType::END_IF});
     }
 
     expect(TokenType::END_IF);
@@ -525,8 +524,7 @@ void Parser::parseIf()
         }
         else
         {
-            while (!check(TokenType::END_IF) && !isAtEnd())
-                advance();
+            skipToTopLevelBoundary({TokenType::END_IF});
         }
 
         expect(TokenType::END_IF);
@@ -544,12 +542,128 @@ void Parser::parseIf()
         }
         else
         {
-            while (!check(TokenType::END_IF) && !isAtEnd())
-                advance();
+            skipToTopLevelBoundary({TokenType::END_IF});
         }
 
         expect(TokenType::END_IF);
     }
+}
+
+// ---------------------------------------------------------------------------
+// parseFor — FOR (initialization, condition, update)
+// Executes the loop body by rewinding the parser to the captured body range.
+// ---------------------------------------------------------------------------
+void Parser::parseFor()
+{
+    expect(TokenType::FOR);
+    expect(TokenType::LPAREN);
+
+    parseAssignment();
+    expect(TokenType::COMMA);
+
+    size_t conditionStart = pos_;
+    VarValue condition = evaluateExpression();
+    if (!condition.isBool())
+    {
+        throw std::runtime_error("FOR loop condition must evaluate to a boolean expression");
+    }
+
+    expect(TokenType::COMMA);
+    size_t updateStart = pos_;
+    size_t headerEnd = findMatchingParen(updateStart);
+
+    pos_ = headerEnd;
+    expect(TokenType::RPAREN);
+    expect(TokenType::START_FOR);
+
+    size_t bodyStart = pos_;
+
+    if (!condition.asBool())
+    {
+        skipToTopLevelBoundary({TokenType::END_FOR});
+        expect(TokenType::END_FOR);
+        return;
+    }
+
+    while (condition.asBool())
+    {
+        pos_ = bodyStart;
+        parseStatements();
+
+        if (!check(TokenType::END_FOR))
+        {
+            throw std::runtime_error("FOR loop body did not terminate with END FOR");
+        }
+
+        size_t bodyEnd = pos_;
+
+        pos_ = updateStart;
+        parseAssignment();
+
+        pos_ = conditionStart;
+        condition = evaluateExpression();
+        if (!condition.isBool())
+        {
+            throw std::runtime_error("FOR loop condition must evaluate to a boolean expression");
+        }
+
+        pos_ = bodyEnd;
+    }
+
+    expect(TokenType::END_FOR);
+}
+
+// ---------------------------------------------------------------------------
+// parseRepeat — REPEAT WHEN (condition)
+// Pre-test loop semantics: the body executes while the condition remains true.
+// ---------------------------------------------------------------------------
+void Parser::parseRepeat()
+{
+    expect(TokenType::REPEAT_WHEN);
+    expect(TokenType::LPAREN);
+
+    size_t conditionStart = pos_;
+    VarValue condition = evaluateExpression();
+    if (!condition.isBool())
+    {
+        throw std::runtime_error("REPEAT WHEN condition must evaluate to a boolean expression");
+    }
+
+    expect(TokenType::RPAREN);
+    expect(TokenType::START_REPEAT);
+
+    size_t bodyStart = pos_;
+
+    if (!condition.asBool())
+    {
+        skipToTopLevelBoundary({TokenType::END_REPEAT});
+        expect(TokenType::END_REPEAT);
+        return;
+    }
+
+    while (condition.asBool())
+    {
+        pos_ = bodyStart;
+        parseStatements();
+
+        if (!check(TokenType::END_REPEAT))
+        {
+            throw std::runtime_error("REPEAT block did not terminate with END REPEAT");
+        }
+
+        size_t bodyEnd = pos_;
+
+        pos_ = conditionStart;
+        condition = evaluateExpression();
+        if (!condition.isBool())
+        {
+            throw std::runtime_error("REPEAT WHEN condition must evaluate to a boolean expression");
+        }
+
+        pos_ = bodyEnd;
+    }
+
+    expect(TokenType::END_REPEAT);
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,6 +1135,103 @@ void Parser::printValue(const VarValue &value)
 }
 
 // ---------------------------------------------------------------------------
+// Helper functions for nested block handling
+// ---------------------------------------------------------------------------
+bool Parser::isBlockStartToken(TokenType type) const
+{
+    return type == TokenType::START_IF ||
+           type == TokenType::START_FOR ||
+           type == TokenType::START_REPEAT;
+}
+
+bool Parser::isBlockEndToken(TokenType type) const
+{
+    return type == TokenType::END_IF ||
+           type == TokenType::END_FOR ||
+           type == TokenType::END_REPEAT;
+}
+
+bool Parser::isBoundaryToken(TokenType type, const std::vector<TokenType> &boundaryTokens) const
+{
+    for (TokenType boundary : boundaryTokens)
+    {
+        if (type == boundary)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t Parser::findMatchingParen(size_t startIndex) const
+{
+    if (startIndex >= tokens_.size())
+    {
+        throw std::runtime_error("Unexpected end of input while searching for closing parenthesis");
+    }
+
+    size_t depth = 1;
+    for (size_t index = startIndex; index < tokens_.size(); ++index)
+    {
+        TokenType type = tokens_[index].type;
+
+        if (type == TokenType::LPAREN)
+        {
+            ++depth;
+        }
+        else if (type == TokenType::RPAREN)
+        {
+            --depth;
+            if (depth == 0)
+            {
+                return index;
+            }
+        }
+    }
+
+    throw std::runtime_error("Unterminated parenthesized expression");
+}
+
+void Parser::skipToTopLevelBoundary(const std::vector<TokenType> &boundaryTokens)
+{
+    size_t depth = 0;
+
+    while (!isAtEnd())
+    {
+        TokenType current = peek().type;
+
+        if (depth == 0 && isBoundaryToken(current, boundaryTokens))
+        {
+            return;
+        }
+
+        if (isBlockStartToken(current))
+        {
+            ++depth;
+            advance();
+            continue;
+        }
+
+        if (isBlockEndToken(current))
+        {
+            if (depth > 0)
+            {
+                --depth;
+                advance();
+                continue;
+            }
+
+            if (isBoundaryToken(current, boundaryTokens))
+            {
+                return;
+            }
+        }
+
+        advance();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // tokenTypeToString — for error messages
 // ---------------------------------------------------------------------------
 std::string Parser::tokenTypeToString(TokenType type) const
@@ -1047,6 +1258,28 @@ std::string Parser::tokenTypeToString(TokenType type) const
         return "PRINT";
     case TokenType::SCAN:
         return "SCAN";
+    case TokenType::IF:
+        return "IF";
+    case TokenType::ELSE:
+        return "ELSE";
+    case TokenType::ELSE_IF:
+        return "ELSE IF";
+    case TokenType::START_IF:
+        return "START IF";
+    case TokenType::END_IF:
+        return "END IF";
+    case TokenType::FOR:
+        return "FOR";
+    case TokenType::START_FOR:
+        return "START FOR";
+    case TokenType::END_FOR:
+        return "END FOR";
+    case TokenType::REPEAT_WHEN:
+        return "REPEAT WHEN";
+    case TokenType::START_REPEAT:
+        return "START REPEAT";
+    case TokenType::END_REPEAT:
+        return "END REPEAT";
     case TokenType::IDENTIFIER:
         return "IDENTIFIER";
     case TokenType::INT_LITERAL:

@@ -54,6 +54,8 @@ private:
     void parsePrint();       // PRINT: expression [& | $]*
     void parseScan();        // SCAN: id
     void parseIf();          // IF/ELSE IF/ELSE conditional blocks
+    void parseFor();         // FOR (init, condition, update)
+    void parseRepeat();      // REPEAT WHEN (condition)
 
     // --- Expression evaluation ---
     VarValue evaluateExpression();  // parse and evaluate an expression
@@ -69,6 +71,11 @@ private:
     // --- Utility ---
     std::string tokenTypeToString(TokenType type) const;
     void printValue(const VarValue &value); // print a VarValue to stdout
+    size_t findMatchingParen(size_t startIndex) const;
+    void skipToTopLevelBoundary(const std::vector<TokenType> &boundaryTokens);
+    bool isBlockStartToken(TokenType type) const;
+    bool isBlockEndToken(TokenType type) const;
+    bool isBoundaryToken(TokenType type, const std::vector<TokenType> &boundaryTokens) const;
 };
 
 #endif

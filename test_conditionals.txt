@@ -1,7 +1,7 @@
 SCRIPT AREA
 START SCRIPT
 
-DECLARE INT a = 0, b = 1
+DECLARE INT a = 2, b = 1
 
 IF (a < b)
 START IF
