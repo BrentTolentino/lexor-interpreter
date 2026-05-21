@@ -126,7 +126,13 @@ void Parser::parseScript()
 // ---------------------------------------------------------------------------
 void Parser::parseStatements()
 {
-    while (!check(TokenType::END_SCRIPT) && !isAtEnd())
+    while (!check(TokenType::END_SCRIPT) &&
+           !check(TokenType::END_IF) &&
+           !check(TokenType::END_FOR) &&
+           !check(TokenType::END_REPEAT) &&
+           !check(TokenType::ELSE_IF) &&
+           !check(TokenType::ELSE) &&
+           !isAtEnd())
     {
         parseStatement();
     }
@@ -155,7 +161,7 @@ void Parser::parseStatement()
     }
     else if (check(TokenType::IF))
     {
-        throw std::runtime_error("IF statements not yet implemented");
+        parseIf();
     }
     else if (check(TokenType::FOR))
     {
@@ -462,6 +468,87 @@ void Parser::parseScan()
             oss << "Error converting input for variable '" << t.value << "': " << e.what();
             throw std::runtime_error(oss.str());
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// parseIf — IF/ELSE IF/ELSE conditional blocks
+// ---------------------------------------------------------------------------
+void Parser::parseIf()
+{
+    // Track whether any branch has already been taken so later branches are
+    // skipped (evaluated but not executed).
+    bool branchTaken = false;
+
+    // ── initial IF ──────────────────────────────────────────────────────────
+    expect(TokenType::IF);
+    expect(TokenType::LPAREN);
+    VarValue condition = evaluateExpression();
+    expect(TokenType::RPAREN);
+
+    if (!condition.isBool())
+        throw std::runtime_error("IF condition must evaluate to a boolean expression");
+
+    expect(TokenType::START_IF);
+
+    if (condition.asBool())
+    {
+        branchTaken = true;
+        parseStatements(); // execute the body
+    }
+    else
+    {
+        // Skip the body without executing
+        while (!check(TokenType::END_IF) && !isAtEnd())
+            advance();
+    }
+
+    expect(TokenType::END_IF);
+
+    // ── zero or more ELSE IF branches ───────────────────────────────────────
+    while (check(TokenType::ELSE_IF))
+    {
+        advance(); // consume ELSE IF
+        expect(TokenType::LPAREN);
+        VarValue elseIfCond = evaluateExpression();
+        expect(TokenType::RPAREN);
+
+        if (!elseIfCond.isBool())
+            throw std::runtime_error("ELSE IF condition must evaluate to a boolean expression");
+
+        expect(TokenType::START_IF);
+
+        if (!branchTaken && elseIfCond.asBool())
+        {
+            branchTaken = true;
+            parseStatements();
+        }
+        else
+        {
+            while (!check(TokenType::END_IF) && !isAtEnd())
+                advance();
+        }
+
+        expect(TokenType::END_IF);
+    }
+
+    // ── optional ELSE branch ────────────────────────────────────────────────
+    if (check(TokenType::ELSE))
+    {
+        advance(); // consume ELSE
+        expect(TokenType::START_IF);
+
+        if (!branchTaken)
+        {
+            parseStatements();
+        }
+        else
+        {
+            while (!check(TokenType::END_IF) && !isAtEnd())
+                advance();
+        }
+
+        expect(TokenType::END_IF);
     }
 }
 

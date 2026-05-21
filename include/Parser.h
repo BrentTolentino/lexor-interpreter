@@ -53,6 +53,7 @@ private:
     void parseAssignment();  // id = expression
     void parsePrint();       // PRINT: expression [& | $]*
     void parseScan();        // SCAN: id
+    void parseIf();          // IF/ELSE IF/ELSE conditional blocks
 
     // --- Expression evaluation ---
     VarValue evaluateExpression();  // parse and evaluate an expression
