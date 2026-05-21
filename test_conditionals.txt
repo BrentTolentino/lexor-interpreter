@@ -1,0 +1,26 @@
+SCRIPT AREA
+START SCRIPT
+
+DECLARE INT a = 2, b = 1
+
+IF (a < b)
+START IF
+    DECLARE BOOL c = "TRUE"
+    IF (c == TRUE)
+    START IF
+        PRINT: "C IS TRUE" & $
+    END IF
+    ELSE
+    START IF
+        PRINT: "C IS FALSE" & $
+    END IF
+END IF
+ELSE IF (a > b)
+START IF
+    PRINT: b & $
+END IF
+ELSE
+START IF
+    PRINT: "BOTH VARIABLES ARE EQUAL" & $
+END IF
+END SCRIPT

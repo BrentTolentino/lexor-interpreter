@@ -1,0 +1,11 @@
+SCRIPT AREA
+START SCRIPT
+DECLARE INT i = 0, j = 0
+FOR (i = 0, i < 2, i = i + 1)
+START FOR
+FOR (j = 0, j < 2, j = j + 1)
+START FOR
+PRINT: i & j & $
+END FOR
+END FOR
+END SCRIPT

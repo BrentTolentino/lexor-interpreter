@@ -1,7 +1,7 @@
 %% Test Scan (working) 
 SCRIPT AREA
 START SCRIPT
-DECLARE BOOL x, y, z
+DECLARE INT x, y, z
 PRINT: "Enter three number separated by comma." $
 SCAN: x, y, z
 %%y = -5

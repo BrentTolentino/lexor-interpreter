@@ -123,7 +123,8 @@ ELSE IF (<BOOL expression>)
 START IF
 <statement>
 ...
-<statement>END IF
+<statement>
+END IF
 ELSE
 START IF
 <statement>

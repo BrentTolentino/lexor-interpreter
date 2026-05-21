@@ -1,18 +1,149 @@
 SCRIPT AREA
 START SCRIPT
 
-    %%Lorem Ipsum
-    
-    DECLARE INT counter = 10
-    DECLARE FLOAT pi = 3.14
-    DECLARE CHAR grade = 'A'
-    DECLARE BOOL isActive = "TRUE"
+%% ─────────────────────────────────────────
+%% Test 1: Basic IF (true branch)
+%% Expected: "x is positive"
+%% ─────────────────────────────────────────
+DECLARE INT x = 10
 
-    counter = counter + 5
-    pi = pi / 2.0
+IF (x > 0)
+START IF
+    PRINT: "Test 1 PASSED: x is positive" & $
+END IF
 
-    PRINT: "Counter value: " & counter $
-    PRINT: "Value of pi is: " & pi $
-    PRINT: "Grade: " & grade $
-    PRINT: "Is Active: " & isActive $
+
+%% ─────────────────────────────────────────
+%% Test 2: Basic IF (false branch, nothing prints)
+%% Expected: (nothing)
+%% ─────────────────────────────────────────
+DECLARE INT y = 2
+
+IF (y > 100)
+START IF
+    PRINT: "Test 2 FAILED: should not print" & $
+END IF
+
+
+%% ─────────────────────────────────────────
+%% Test 3: IF / ELSE
+%% Expected: "y is small"
+%% ─────────────────────────────────────────
+IF (y > 100)
+START IF
+    PRINT: "Test 3 FAILED: wrong branch" & $
+END IF
+ELSE
+START IF
+    PRINT: "Test 3 PASSED: y is small" & $
+END IF
+
+
+%% ─────────────────────────────────────────
+%% Test 4: IF / ELSE IF / ELSE chain
+%% Expected: "grade is B"
+%% ─────────────────────────────────────────
+DECLARE INT score = 85
+
+IF (score >= 90)
+START IF
+    PRINT: "Test 4 FAILED: grade is A (wrong)" & $
+END IF
+ELSE IF (score >= 80)
+START IF
+    PRINT: "Test 4 PASSED: grade is B" & $
+END IF
+ELSE IF (score >= 70)
+START IF
+    PRINT: "Test 4 FAILED: grade is C (wrong)" & $
+END IF
+ELSE
+START IF
+    PRINT: "Test 4 FAILED: grade is F (wrong)" & $
+END IF
+
+
+%% ─────────────────────────────────────────
+%% Test 5: Only ELSE fires
+%% Expected: "none of the above"
+%% ─────────────────────────────────────────
+DECLARE INT z = 1
+
+IF (z == 10)
+START IF
+    PRINT: "Test 5 FAILED" & $
+END IF
+ELSE IF (z == 20)
+START IF
+    PRINT: "Test 5 FAILED" & $
+END IF
+ELSE
+START IF
+    PRINT: "Test 5 PASSED: none of the above" & $
+END IF
+
+
+%% ─────────────────────────────────────────
+%% Test 6: Nested IF inside IF
+%% Expected: "outer true" then "inner true"
+%% ─────────────────────────────────────────
+DECLARE INT a = 5
+DECLARE INT b = 3
+
+IF (a > 0)
+START IF
+    PRINT: "Test 6 outer: a is positive" & $
+    IF (b < a)
+    START IF
+        PRINT: "Test 6 inner PASSED: b is less than a" & $
+    END IF
+END IF
+
+
+%% ─────────────────────────────────────────
+%% Test 7: AND / OR in condition
+%% Expected: "both conditions met"
+%% ─────────────────────────────────────────
+IF (a > 0 AND b > 0)
+START IF
+    PRINT: "Test 7 PASSED: both a and b are positive" & $
+END IF
+
+
+%% ─────────────────────────────────────────
+%% Test 8: NOT in condition
+%% Expected: "x is not zero"
+%% ─────────────────────────────────────────
+DECLARE BOOL flag = FALSE
+
+IF (NOT flag)
+START IF
+    PRINT: "Test 8 PASSED: flag is false" & $
+END IF
+
+
+%% ─────────────────────────────────────────
+%% Test 9: BOOL variable as condition
+%% Expected: "flag2 is true"
+%% ─────────────────────────────────────────
+DECLARE BOOL flag2 = TRUE
+
+IF (flag2 == TRUE)
+START IF
+    PRINT: "Test 9 PASSED: flag2 is TRUE" & $
+END IF
+
+
+%% ─────────────────────────────────────────
+%% Test 10: Condition using expression result
+%% Expected: "sum is big"
+%% ─────────────────────────────────────────
+DECLARE INT p = 40
+DECLARE INT q = 60
+
+IF (p + q > 50)
+START IF
+    PRINT: "Test 10 PASSED: p + q is greater than 50" & $
+END IF
+
 END SCRIPT

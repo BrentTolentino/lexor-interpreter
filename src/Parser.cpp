@@ -126,7 +126,13 @@ void Parser::parseScript()
 // ---------------------------------------------------------------------------
 void Parser::parseStatements()
 {
-    while (!check(TokenType::END_SCRIPT) && !isAtEnd())
+    while (!check(TokenType::END_SCRIPT) &&
+           !check(TokenType::END_IF) &&
+           !check(TokenType::END_FOR) &&
+           !check(TokenType::END_REPEAT) &&
+           !check(TokenType::ELSE_IF) &&
+           !check(TokenType::ELSE) &&
+           !isAtEnd())
     {
         parseStatement();
     }
@@ -155,15 +161,15 @@ void Parser::parseStatement()
     }
     else if (check(TokenType::IF))
     {
-        throw std::runtime_error("IF statements not yet implemented");
+        parseIf();
     }
     else if (check(TokenType::FOR))
     {
-        throw std::runtime_error("FOR loops not yet implemented");
+        parseFor();
     }
     else if (check(TokenType::REPEAT_WHEN))
     {
-        throw std::runtime_error("REPEAT WHEN loops not yet implemented");
+        parseRepeat();
     }
     else
     {
@@ -258,22 +264,17 @@ void Parser::parsePrint()
     expect(TokenType::PRINT);
     expect(TokenType::COLON);
 
-    // Parse and print the first expression
+    // Parse and print the entire concatenation expression
+    // The expression can include & operators to concatenate values,
+    // and $ tokens when they are explicitly part of the expression.
     VarValue value = evaluateExpression();
     printValue(value);
 
-    // Handle concatenation (&) and newline ($)
-    while (check(TokenType::AMPERSAND) || check(TokenType::DOLLAR))
+    // Consume trailing PRINT terminators so statements like `PRINT: d $`
+    // do not leave the DOLLAR token in the stream.
+    while (match(TokenType::DOLLAR))
     {
-        if (match(TokenType::AMPERSAND))
-        {
-            value = evaluateExpression();
-            printValue(value);
-        }
-        else if (match(TokenType::DOLLAR))
-        {
-            std::cout << std::endl;
-        }
+        std::cout << std::endl;
     }
 }
 
@@ -398,7 +399,10 @@ void Parser::parseScan()
                 {
                     v = std::stol(inputToken, &idx);
                 }
-                catch (...) { idx = std::string::npos; }
+                catch (...)
+                {
+                    idx = std::string::npos;
+                }
                 if (idx != inputToken.size())
                 {
                     std::ostringstream oss;
@@ -415,7 +419,10 @@ void Parser::parseScan()
                 {
                     v = std::stof(inputToken, &idx);
                 }
-                catch (...) { idx = std::string::npos; }
+                catch (...)
+                {
+                    idx = std::string::npos;
+                }
                 if (idx != inputToken.size())
                 {
                     std::ostringstream oss;
@@ -438,7 +445,8 @@ void Parser::parseScan()
             {
                 // Accept TRUE/FALSE (case-insensitive) or 1/0
                 std::string s = inputToken;
-                for (auto &c : s) c = static_cast<char>(std::toupper(c));
+                for (auto &c : s)
+                    c = static_cast<char>(std::toupper(c));
                 if (s == "TRUE" || s == "1")
                 {
                     value = true;
@@ -471,11 +479,347 @@ void Parser::parseScan()
 }
 
 // ---------------------------------------------------------------------------
+// parseIf — IF/ELSE IF/ELSE conditional blocks
+// ---------------------------------------------------------------------------
+void Parser::parseIf()
+{
+    // Track whether any branch has already been taken so later branches are
+    // skipped (evaluated but not executed).
+    bool branchTaken = false;
+
+    // ── initial IF ──────────────────────────────────────────────────────────
+    expect(TokenType::IF);
+    expect(TokenType::LPAREN);
+    VarValue condition = evaluateExpression();
+    expect(TokenType::RPAREN);
+
+    if (!condition.isBool())
+        throw std::runtime_error("IF condition must evaluate to a boolean expression");
+
+    expect(TokenType::START_IF);
+
+    if (condition.asBool())
+    {
+        branchTaken = true;
+        parseStatements(); // execute the body
+    }
+    else
+    {
+        // Skip the body without executing
+        skipToTopLevelBoundary({TokenType::END_IF});
+    }
+
+    expect(TokenType::END_IF);
+
+    // ── zero or more ELSE IF branches ───────────────────────────────────────
+    while (check(TokenType::ELSE_IF))
+    {
+        advance(); // consume ELSE IF
+        expect(TokenType::LPAREN);
+        VarValue elseIfCond = evaluateExpression();
+        expect(TokenType::RPAREN);
+
+        if (!elseIfCond.isBool())
+            throw std::runtime_error("ELSE IF condition must evaluate to a boolean expression");
+
+        expect(TokenType::START_IF);
+
+        if (!branchTaken && elseIfCond.asBool())
+        {
+            branchTaken = true;
+            parseStatements();
+        }
+        else
+        {
+            skipToTopLevelBoundary({TokenType::END_IF});
+        }
+
+        expect(TokenType::END_IF);
+    }
+
+    // ── optional ELSE branch ────────────────────────────────────────────────
+    if (check(TokenType::ELSE))
+    {
+        advance(); // consume ELSE
+        expect(TokenType::START_IF);
+
+        if (!branchTaken)
+        {
+            parseStatements();
+        }
+        else
+        {
+            skipToTopLevelBoundary({TokenType::END_IF});
+        }
+
+        expect(TokenType::END_IF);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// parseFor — FOR (initialization, condition, update)
+// Executes the loop body by rewinding the parser to the captured body range.
+// ---------------------------------------------------------------------------
+void Parser::parseFor()
+{
+    expect(TokenType::FOR);
+    expect(TokenType::LPAREN);
+
+    parseAssignment();
+    expect(TokenType::COMMA);
+
+    size_t conditionStart = pos_;
+    VarValue condition = evaluateExpression();
+    if (!condition.isBool())
+    {
+        throw std::runtime_error("FOR loop condition must evaluate to a boolean expression");
+    }
+
+    expect(TokenType::COMMA);
+    size_t updateStart = pos_;
+    size_t headerEnd = findMatchingParen(updateStart);
+
+    pos_ = headerEnd;
+    expect(TokenType::RPAREN);
+    expect(TokenType::START_FOR);
+
+    size_t bodyStart = pos_;
+
+    if (!condition.asBool())
+    {
+        skipToTopLevelBoundary({TokenType::END_FOR});
+        expect(TokenType::END_FOR);
+        return;
+    }
+
+    while (condition.asBool())
+    {
+        pos_ = bodyStart;
+        parseStatements();
+
+        if (!check(TokenType::END_FOR))
+        {
+            throw std::runtime_error("FOR loop body did not terminate with END FOR");
+        }
+
+        size_t bodyEnd = pos_;
+
+        pos_ = updateStart;
+        parseAssignment();
+
+        pos_ = conditionStart;
+        condition = evaluateExpression();
+        if (!condition.isBool())
+        {
+            throw std::runtime_error("FOR loop condition must evaluate to a boolean expression");
+        }
+
+        pos_ = bodyEnd;
+    }
+
+    expect(TokenType::END_FOR);
+}
+
+// ---------------------------------------------------------------------------
+// parseRepeat — REPEAT WHEN (condition)
+// Pre-test loop semantics: the body executes while the condition remains true.
+// ---------------------------------------------------------------------------
+void Parser::parseRepeat()
+{
+    expect(TokenType::REPEAT_WHEN);
+    expect(TokenType::LPAREN);
+
+    size_t conditionStart = pos_;
+    VarValue condition = evaluateExpression();
+    if (!condition.isBool())
+    {
+        throw std::runtime_error("REPEAT WHEN condition must evaluate to a boolean expression");
+    }
+
+    expect(TokenType::RPAREN);
+    expect(TokenType::START_REPEAT);
+
+    size_t bodyStart = pos_;
+
+    if (!condition.asBool())
+    {
+        skipToTopLevelBoundary({TokenType::END_REPEAT});
+        expect(TokenType::END_REPEAT);
+        return;
+    }
+
+    while (condition.asBool())
+    {
+        pos_ = bodyStart;
+        parseStatements();
+
+        if (!check(TokenType::END_REPEAT))
+        {
+            throw std::runtime_error("REPEAT block did not terminate with END REPEAT");
+        }
+
+        size_t bodyEnd = pos_;
+
+        pos_ = conditionStart;
+        condition = evaluateExpression();
+        if (!condition.isBool())
+        {
+            throw std::runtime_error("REPEAT WHEN condition must evaluate to a boolean expression");
+        }
+
+        pos_ = bodyEnd;
+    }
+
+    expect(TokenType::END_REPEAT);
+}
+
+// ---------------------------------------------------------------------------
 // evaluateExpression — parse and evaluate an expression
 // ---------------------------------------------------------------------------
 VarValue Parser::evaluateExpression()
 {
-    return parseAddition();
+    return parseLogicalOr();
+}
+
+// ---------------------------------------------------------------------------
+// parseLogicalOr — handle OR operator (lowest precedence)
+// ---------------------------------------------------------------------------
+VarValue Parser::parseLogicalOr()
+{
+    VarValue result = parseLogicalAnd();
+
+    while (check(TokenType::OR))
+    {
+        advance(); // consume OR
+        VarValue right = parseLogicalAnd();
+
+        // Both operands must be boolean
+        if (!result.isBool() || !right.isBool())
+        {
+            throw std::runtime_error("Logical OR requires boolean operands");
+        }
+
+        result = VarValue(result.asBool() || right.asBool());
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// parseLogicalAnd — handle AND operator
+// ---------------------------------------------------------------------------
+VarValue Parser::parseLogicalAnd()
+{
+    VarValue result = parseComparison();
+
+    while (check(TokenType::AND))
+    {
+        advance(); // consume AND
+        VarValue right = parseComparison();
+
+        // Both operands must be boolean
+        if (!result.isBool() || !right.isBool())
+        {
+            throw std::runtime_error("Logical AND requires boolean operands");
+        }
+
+        result = VarValue(result.asBool() && right.asBool());
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// parseComparison — handle ==, !=, <, >, <=, >= operators
+// ---------------------------------------------------------------------------
+VarValue Parser::parseComparison()
+{
+    VarValue result = parseAddition();
+
+    while (check(TokenType::EQUAL) || check(TokenType::NOT_EQUAL) ||
+           check(TokenType::LESS) || check(TokenType::GREATER) ||
+           check(TokenType::LESS_EQ) || check(TokenType::GREATER_EQ))
+    {
+        TokenType op = advance().type;
+        VarValue right = parseAddition();
+
+        bool comparison_result = false;
+
+        // Handle numeric comparisons
+        if ((result.isInt() || result.isFloat()) && (right.isInt() || right.isFloat()))
+        {
+            float lhs = result.isInt() ? static_cast<float>(result.asInt()) : result.asFloat();
+            float rhs = right.isInt() ? static_cast<float>(right.asInt()) : right.asFloat();
+
+            switch (op)
+            {
+            case TokenType::EQUAL:
+                comparison_result = (lhs == rhs);
+                break;
+            case TokenType::NOT_EQUAL:
+                comparison_result = (lhs != rhs);
+                break;
+            case TokenType::LESS:
+                comparison_result = (lhs < rhs);
+                break;
+            case TokenType::GREATER:
+                comparison_result = (lhs > rhs);
+                break;
+            case TokenType::LESS_EQ:
+                comparison_result = (lhs <= rhs);
+                break;
+            case TokenType::GREATER_EQ:
+                comparison_result = (lhs >= rhs);
+                break;
+            default:
+                break;
+            }
+        }
+        // Handle string comparisons
+        else if (result.isString() && right.isString())
+        {
+            std::string lhs = result.asString();
+            std::string rhs = right.asString();
+
+            switch (op)
+            {
+            case TokenType::EQUAL:
+                comparison_result = (lhs == rhs);
+                break;
+            case TokenType::NOT_EQUAL:
+                comparison_result = (lhs != rhs);
+                break;
+            default:
+                throw std::runtime_error("Comparison operators <, >, <=, >= not supported for strings");
+            }
+        }
+        // Handle boolean comparisons
+        else if (result.isBool() && right.isBool())
+        {
+            bool lhs = result.asBool();
+            bool rhs = right.asBool();
+
+            switch (op)
+            {
+            case TokenType::EQUAL:
+                comparison_result = (lhs == rhs);
+                break;
+            case TokenType::NOT_EQUAL:
+                comparison_result = (lhs != rhs);
+                break;
+            default:
+                throw std::runtime_error("Only == and != operators supported for booleans");
+            }
+        }
+        else
+        {
+            throw std::runtime_error("Invalid operand types for comparison operator");
+        }
+
+        result = VarValue(comparison_result);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -642,10 +986,23 @@ VarValue Parser::parseConcatenation()
 }
 
 //
-// parseUnary - handle unary + and - operators
+// parseUnary - handle unary operators: +, -, and NOT
 //
 VarValue Parser::parseUnary()
 {
+    if (check(TokenType::NOT))
+    {
+        advance();                     // consume NOT
+        VarValue right = parseUnary(); // Recursively call for chained unary operators
+
+        if (!right.isBool())
+        {
+            throw std::runtime_error("NOT operator requires a boolean operand");
+        }
+
+        return VarValue(!right.asBool());
+    }
+
     if (check(TokenType::PLUS) || check(TokenType::MINUS))
     {
         TokenType operatorType = advance().type; // Consume the unary operator
@@ -671,10 +1028,13 @@ VarValue Parser::parseUnary()
         // The Lexer already handles numeric literals with implicit positive sign.
         else if (operatorType == TokenType::PLUS)
         {
-            if (right.isInt() || right.isFloat()) {
+            if (right.isInt() || right.isFloat())
+            {
                 return right; // No change for unary plus on numbers
-            } else {
-                 throw std::runtime_error("Cannot apply unary plus to non-numeric type.");
+            }
+            else
+            {
+                throw std::runtime_error("Cannot apply unary plus to non-numeric type.");
             }
         }
     }
@@ -735,6 +1095,13 @@ VarValue Parser::parsePrimaryValue()
         return token.value == "TRUE";
     }
 
+    // Dollar sign ($) represents a newline/carriage return in PRINT context
+    if (check(TokenType::DOLLAR))
+    {
+        advance();
+        return VarValue(std::string("\n"));
+    }
+
     // Grouped expression (not implemented yet)
     if (check(TokenType::LPAREN))
     {
@@ -775,6 +1142,103 @@ void Parser::printValue(const VarValue &value)
 }
 
 // ---------------------------------------------------------------------------
+// Helper functions for nested block handling
+// ---------------------------------------------------------------------------
+bool Parser::isBlockStartToken(TokenType type) const
+{
+    return type == TokenType::START_IF ||
+           type == TokenType::START_FOR ||
+           type == TokenType::START_REPEAT;
+}
+
+bool Parser::isBlockEndToken(TokenType type) const
+{
+    return type == TokenType::END_IF ||
+           type == TokenType::END_FOR ||
+           type == TokenType::END_REPEAT;
+}
+
+bool Parser::isBoundaryToken(TokenType type, const std::vector<TokenType> &boundaryTokens) const
+{
+    for (TokenType boundary : boundaryTokens)
+    {
+        if (type == boundary)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t Parser::findMatchingParen(size_t startIndex) const
+{
+    if (startIndex >= tokens_.size())
+    {
+        throw std::runtime_error("Unexpected end of input while searching for closing parenthesis");
+    }
+
+    size_t depth = 1;
+    for (size_t index = startIndex; index < tokens_.size(); ++index)
+    {
+        TokenType type = tokens_[index].type;
+
+        if (type == TokenType::LPAREN)
+        {
+            ++depth;
+        }
+        else if (type == TokenType::RPAREN)
+        {
+            --depth;
+            if (depth == 0)
+            {
+                return index;
+            }
+        }
+    }
+
+    throw std::runtime_error("Unterminated parenthesized expression");
+}
+
+void Parser::skipToTopLevelBoundary(const std::vector<TokenType> &boundaryTokens)
+{
+    size_t depth = 0;
+
+    while (!isAtEnd())
+    {
+        TokenType current = peek().type;
+
+        if (depth == 0 && isBoundaryToken(current, boundaryTokens))
+        {
+            return;
+        }
+
+        if (isBlockStartToken(current))
+        {
+            ++depth;
+            advance();
+            continue;
+        }
+
+        if (isBlockEndToken(current))
+        {
+            if (depth > 0)
+            {
+                --depth;
+                advance();
+                continue;
+            }
+
+            if (isBoundaryToken(current, boundaryTokens))
+            {
+                return;
+            }
+        }
+
+        advance();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // tokenTypeToString — for error messages
 // ---------------------------------------------------------------------------
 std::string Parser::tokenTypeToString(TokenType type) const
@@ -801,6 +1265,28 @@ std::string Parser::tokenTypeToString(TokenType type) const
         return "PRINT";
     case TokenType::SCAN:
         return "SCAN";
+    case TokenType::IF:
+        return "IF";
+    case TokenType::ELSE:
+        return "ELSE";
+    case TokenType::ELSE_IF:
+        return "ELSE IF";
+    case TokenType::START_IF:
+        return "START IF";
+    case TokenType::END_IF:
+        return "END IF";
+    case TokenType::FOR:
+        return "FOR";
+    case TokenType::START_FOR:
+        return "START FOR";
+    case TokenType::END_FOR:
+        return "END FOR";
+    case TokenType::REPEAT_WHEN:
+        return "REPEAT WHEN";
+    case TokenType::START_REPEAT:
+        return "START REPEAT";
+    case TokenType::END_REPEAT:
+        return "END REPEAT";
     case TokenType::IDENTIFIER:
         return "IDENTIFIER";
     case TokenType::INT_LITERAL:

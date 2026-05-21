@@ -3,7 +3,7 @@ When cloning the repo just needs to type `make` in the terminal to compile the c
 ## Increment 2 Tasks
 - [x] • Can recognize unary operator
 - [x] • Should be able to read input data (SCAN).Q
-- [ ] • Should be able to perform arithmetic and logical operations.
+- [x] • Should be able to perform arithmetic and logical operations.
         
         Details:
         - Changes for the Unary operator were done in the Parser.h and Parser.cpp. 
