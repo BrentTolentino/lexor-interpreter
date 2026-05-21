@@ -266,9 +266,16 @@ void Parser::parsePrint()
 
     // Parse and print the entire concatenation expression
     // The expression can include & operators to concatenate values,
-    // and $ tokens which represent newlines
+    // and $ tokens when they are explicitly part of the expression.
     VarValue value = evaluateExpression();
     printValue(value);
+
+    // Consume trailing PRINT terminators so statements like `PRINT: d $`
+    // do not leave the DOLLAR token in the stream.
+    while (match(TokenType::DOLLAR))
+    {
+        std::cout << std::endl;
+    }
 }
 
 // ---------------------------------------------------------------------------
