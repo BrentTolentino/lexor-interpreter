@@ -1,0 +1,7 @@
+SCRIPT AREA
+START SCRIPT
+
+ PRINT: "g++ -Wall -Wextra -std=c++11 -Iinclude -c src/Lexer.cpp -o src/Lexer.o"  & $
+ PRINT: "g++ -Wall -Wextra -std=c++11 -Iinclude -o lexor src/main.o src/Lexer.o src/SymbolTable.o src/Parser.o"  & $
+
+END SCRIPT

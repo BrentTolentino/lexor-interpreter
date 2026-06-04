@@ -72,13 +72,12 @@ void SymbolTable::assign(const std::string &name, const VarValue &val)
         typeMatch = true;
         break;
     case TokenType::TYPE_FLOAT:
-        if (!val.isFloat())
+        // Accept FLOAT or INT (implicit conversion)
+        if (!val.isFloat() && !val.isInt())
         {
             std::ostringstream oss;
             oss << "Type mismatch for variable '" << name << "': expected FLOAT but got ";
-            if (val.isInt())
-                oss << "INT";
-            else if (val.isChar())
+            if (val.isChar())
                 oss << "CHAR";
             else if (val.isBool())
                 oss << "BOOL";
@@ -128,7 +127,15 @@ void SymbolTable::assign(const std::string &name, const VarValue &val)
 
     if (typeMatch)
     {
-        sym.value = val;
+        // Handle implicit conversion from INT to FLOAT
+        if (sym.type == TokenType::TYPE_FLOAT && val.isInt())
+        {
+            sym.value = static_cast<float>(val.asInt());
+        }
+        else
+        {
+            sym.value = val;
+        }
     }
 }
 
